@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cat-Wing: Galactic Guardian</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div id="game-wrapper">
+        <canvas id="gameCanvas"></canvas>
+        
+        <!-- Score HUD -->
+        <div id="hud">
+            <div class="stat">SCORE: <span id="scoreVal">0</span></div>
+        </div>
+
+        <!-- Game Over / Start Screen -->
+        <div id="screen-overlay">
+            <h1 id="statusTitle">GAME OVER</h1>
+            <p>Your cat-ship was destroyed!</p>
+            <p>FINAL SCORE: <span id="finalScore">0</span></p>
+            <button id="restartBtn">LAUNCH AGAIN</button>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
