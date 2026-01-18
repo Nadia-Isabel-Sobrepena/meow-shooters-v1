@@ -1,182 +1,153 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 const scoreVal = document.getElementById('scoreVal');
-const finalScore = document.getElementById('finalScore');
+const grazeVal = document.getElementById('grazeVal');
+const hpFill = document.getElementById('boss-hp-fill');
 const overlay = document.getElementById('screen-overlay');
 const restartBtn = document.getElementById('restartBtn');
 
-// Configuration
 canvas.width = 600;
 canvas.height = 800;
 
 let score = 0;
+let graze = 0;
 let gameActive = true;
 let frameCount = 0;
-const input = { left: false, right: false, up: false, down: false, space: false };
 
-let player, bullets, enemies, particles, stars;
+const input = { left: false, right: false, up: false, down: false, space: false, shift: false };
+let player, boss, pBullets, eBullets, stars;
 
-// --- Vector Drawing Functions ---
+// --- Helper: Drawing ---
 
-function drawPlayer(x, y) {
+function drawPlayer(x, y, isFocus) {
     ctx.save();
     ctx.translate(x, y);
     
-    // Wings
-    ctx.fillStyle = '#7a2eb0';
-    ctx.beginPath();
-    ctx.moveTo(-25, 10); ctx.lineTo(25, 10); ctx.lineTo(0, -10);
-    ctx.fill();
-
-    // Ship Body
+    // Visual Ship
+    ctx.globalAlpha = isFocus ? 0.7 : 1;
     ctx.fillStyle = '#f0f0f0';
-    ctx.beginPath();
-    ctx.moveTo(-12, 15); ctx.lineTo(12, 15); ctx.lineTo(0, -25);
-    ctx.fill();
+    ctx.beginPath(); ctx.moveTo(0, -20); ctx.lineTo(-15, 15); ctx.lineTo(15, 15); ctx.fill();
+    ctx.fillStyle = '#ff99cc'; // Ears
+    ctx.fillRect(-10, -10, 5, 5); ctx.fillRect(5, -10, 5, 5);
 
-    // Cat Ears
-    ctx.fillStyle = '#ff99cc';
-    ctx.beginPath(); // Left
-    ctx.moveTo(-10, -12); ctx.lineTo(-15, -25); ctx.lineTo(-4, -18); ctx.fill();
-    ctx.beginPath(); // Right
-    ctx.moveTo(10, -12); ctx.lineTo(15, -25); ctx.lineTo(4, -18); ctx.fill();
-
-    // Engine Fire
-    ctx.fillStyle = frameCount % 4 < 2 ? '#ffcc00' : '#ff6600';
-    ctx.beginPath();
-    ctx.moveTo(-5, 15); ctx.lineTo(5, 15); ctx.lineTo(0, 25);
-    ctx.fill();
-
-    ctx.restore();
-}
-
-function drawFishBullet(x, y) {
-    ctx.fillStyle = '#ffaa00';
-    ctx.beginPath();
-    ctx.ellipse(x, y, 5, 8, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(x, y + 6);
-    ctx.lineTo(x - 5, y + 12);
-    ctx.lineTo(x + 5, y + 12);
-    ctx.fill();
-}
-
-function drawEnemy(x, y, type, color, rotation) {
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(rotation);
-
-    if (type === 'mouse') {
-        ctx.fillStyle = '#888';
-        ctx.beginPath();
-        ctx.ellipse(0, 0, 12, 18, 0, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#ff99cc';
-        ctx.beginPath();
-        ctx.arc(-10, -10, 6, 0, Math.PI * 2); ctx.arc(10, -10, 6, 0, Math.PI * 2); ctx.fill();
-    } else {
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.arc(0, 0, 18, 0, Math.PI * 2); ctx.stroke();
-        for(let i=0; i<3; i++) {
-            ctx.beginPath();
-            ctx.moveTo(-15, -5 + (i*5));
-            ctx.bezierCurveTo(-5, -20, 5, 20, 15, -5 + (i*5));
-            ctx.stroke();
-        }
+    // TOUHOU HITBOX (Only visible in Focus Mode)
+    if (isFocus) {
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = 'white';
+        ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'red';
+        ctx.beginPath(); ctx.arc(0, 0, 2, 0, Math.PI * 2); ctx.fill();
     }
     ctx.restore();
 }
 
 // --- Classes ---
 
-class Ship {
+class Player {
     constructor() {
         this.x = canvas.width / 2;
         this.y = canvas.height - 100;
-        this.speed = 7;
-        this.radius = 15;
-        this.cooldown = 0;
+        this.hitRadius = 2;   // Tiny hitbox
+        this.grazeRadius = 20; // Larger graze area
+        this.speed = 6;
+        this.focusSpeed = 2.5;
     }
     update() {
-        if (input.left && this.x > 30) this.x -= this.speed;
-        if (input.right && this.x < canvas.width - 30) this.x += this.speed;
-        if (input.up && this.y > 30) this.y -= this.speed;
-        if (input.down && this.y < canvas.height - 30) this.y += this.speed;
+        let s = input.shift ? this.focusSpeed : this.speed;
+        if (input.left && this.x > 20) this.x -= s;
+        if (input.right && this.x < canvas.width - 20) this.x += s;
+        if (input.up && this.y > 20) this.y -= s;
+        if (input.down && this.y < canvas.height - 20) this.y += s;
 
-        if (input.space && this.cooldown <= 0) {
-            bullets.push(new Bullet(this.x, this.y - 20));
-            this.cooldown = 10;
+        if (input.space && frameCount % 5 === 0) {
+            pBullets.push({ x: this.x, y: this.y - 20 });
         }
-        if (this.cooldown > 0) this.cooldown--;
-        drawPlayer(this.x, this.y);
+        drawPlayer(this.x, this.y, input.shift);
     }
 }
 
-class Bullet {
-    constructor(x, y) {
-        this.x = x; this.y = y;
-        this.speed = 10;
-        this.radius = 5;
-    }
-    update() {
-        this.y -= this.speed;
-        drawFishBullet(this.x, this.y);
-    }
-}
-
-class Enemy {
+class Boss {
     constructor() {
-        this.x = Math.random() * (canvas.width - 60) + 30;
-        this.y = -50;
-        this.type = Math.random() > 0.5 ? 'mouse' : 'yarn';
-        this.color = `hsl(${Math.random() * 360}, 70%, 60%)`;
-        this.speed = 2 + (score / 1000) + Math.random() * 2;
-        this.rotation = 0;
-        this.rotSpeed = (Math.random() - 0.5) * 0.1;
-        this.radius = 18;
+        this.x = canvas.width / 2;
+        this.y = 150;
+        this.maxHp = 2000;
+        this.hp = 2000;
+        this.targetX = canvas.width / 2;
+        this.moveTimer = 0;
     }
     update() {
-        this.y += this.speed;
-        this.rotation += this.rotSpeed;
-        drawEnemy(this.x, this.y, this.type, this.color, this.rotation);
+        // Simple side-to-side hovering
+        if (this.moveTimer <= 0) {
+            this.targetX = Math.random() * (canvas.width - 200) + 100;
+            this.moveTimer = 120;
+        }
+        this.x += (this.targetX - this.x) * 0.05;
+        this.moveTimer--;
+
+        this.shoot();
+        this.draw();
+        
+        // Update HP Bar
+        hpFill.style.width = (this.hp / this.maxHp) * 100 + "%";
+    }
+    shoot() {
+        // Pattern 1: Spiral (HP > 1300)
+        if (this.hp > 1300) {
+            if (frameCount % 3 === 0) {
+                let angle = frameCount * 0.15;
+                this.fireBullet(angle, 4, '#ff00ff');
+                this.fireBullet(angle + Math.PI, 4, '#ff00ff');
+            }
+        } 
+        // Pattern 2: Aimed Bursts (700 < HP <= 1300)
+        else if (this.hp > 700) {
+            if (frameCount % 40 === 0) {
+                for (let i = -2; i <= 2; i++) {
+                    let angle = Math.atan2(player.y - this.y, player.x - this.x) + (i * 0.2);
+                    this.fireBullet(angle, 3.5, '#00f2fe');
+                }
+            }
+        } 
+        // Pattern 3: Chaos Petals (HP < 700)
+        else {
+            if (frameCount % 10 === 0) {
+                for (let i = 0; i < 8; i++) {
+                    let angle = (i * Math.PI / 4) + (frameCount * 0.02);
+                    this.fireBullet(angle, 3, '#ffcc00');
+                }
+            }
+        }
+    }
+    fireBullet(angle, speed, color) {
+        eBullets.push({
+            x: this.x, y: this.y,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            color: color,
+            radius: 5,
+            grazed: false
+        });
+    }
+    draw() {
+        // Draw Boss (A large robo-mouse)
+        ctx.fillStyle = '#444';
+        ctx.beginPath(); ctx.arc(this.x, this.y, 40, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#ff007f';
+        ctx.beginPath(); ctx.arc(this.x - 20, this.y - 10, 15, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(this.x + 20, this.y - 10, 15, 0, Math.PI * 2); ctx.fill();
     }
 }
 
-class Particle {
-    constructor(x, y, color) {
-        this.x = x; this.y = y; this.color = color;
-        this.vx = (Math.random() - 0.5) * 8;
-        this.vy = (Math.random() - 0.5) * 8;
-        this.life = 1.0;
-    }
-    update() {
-        this.x += this.vx; this.y += this.vy;
-        this.life -= 0.03;
-        ctx.globalAlpha = this.life;
-        ctx.fillStyle = this.color;
-        ctx.fillRect(this.x, this.y, 3, 3);
-        ctx.globalAlpha = 1;
-    }
-}
-
-// --- Game Engine ---
+// --- Engine ---
 
 function init() {
-    player = new Ship();
-    bullets = [];
-    enemies = [];
-    particles = [];
-    stars = Array.from({length: 100}, () => ({
-        x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height,
-        s: Math.random() * 2
-    }));
-    score = 0;
-    scoreVal.innerText = score;
-    gameActive = true;
+    player = new Player();
+    boss = new Boss();
+    pBullets = []; eBullets = [];
+    stars = Array.from({length: 50}, () => ({x: Math.random() * canvas.width, y: Math.random() * canvas.height, s: Math.random() * 2}));
+    score = 0; graze = 0; gameActive = true;
     overlay.style.display = 'none';
-    requestAnimationFrame(loop);
+    loop();
 }
 
 function loop() {
@@ -184,77 +155,84 @@ function loop() {
     frameCount++;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Stars background
-    ctx.fillStyle = "#FFF";
+    // Background
+    ctx.fillStyle = "#fff";
     stars.forEach(s => {
         ctx.fillRect(s.x, s.y, s.s, s.s);
-        s.y += (s.s * 0.5);
-        if (s.y > canvas.height) s.y = 0;
+        s.y += 1; if (s.y > canvas.height) s.y = 0;
     });
 
     player.update();
+    boss.update();
 
-    // Spawning
-    if (frameCount % Math.max(15, 50 - Math.floor(score/200)) === 0) {
-        enemies.push(new Enemy());
-    }
-
-    // Update Bullets
-    bullets.forEach((b, i) => {
-        b.update();
-        if (b.y < -20) bullets.splice(i, 1);
+    // Player Bullets
+    pBullets.forEach((b, i) => {
+        b.y -= 12;
+        ctx.fillStyle = '#00f2fe'; ctx.fillRect(b.x - 2, b.y, 4, 15);
+        if (Math.hypot(b.x - boss.x, b.y - boss.y) < 40) {
+            boss.hp -= 2; score += 10;
+            pBullets.splice(i, 1);
+        }
+        if (b.y < 0) pBullets.splice(i, 1);
     });
 
-    // Update Enemies
-    enemies.forEach((e, ei) => {
-        e.update();
+    // Enemy Bullets
+    eBullets.forEach((b, i) => {
+        b.x += b.vx; b.y += b.vy;
+        
+        ctx.fillStyle = b.color;
+        ctx.beginPath(); ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = 'white'; ctx.stroke();
 
-        // Bullet Collision
-        bullets.forEach((b, bi) => {
-            if (Math.hypot(e.x - b.x, e.y - b.y) < e.radius + b.radius) {
-                for(let k=0; k<10; k++) particles.push(new Particle(e.x, e.y, e.type === 'mouse' ? '#888' : e.color));
-                enemies.splice(ei, 1);
-                bullets.splice(bi, 1);
-                score += 10;
-                scoreVal.innerText = score;
-            }
-        });
-
-        // Player Collision
-        if (Math.hypot(e.x - player.x, e.y - player.y) < e.radius + player.radius) {
-            gameOver();
+        let dist = Math.hypot(b.x - player.x, b.y - player.y);
+        
+        // 1. Collision Check (Touhou tiny hitbox)
+        if (dist < player.hitRadius + b.radius) {
+            gameActive = false;
+            overlay.style.display = 'flex';
+            document.getElementById('finalScore').innerText = score;
+        }
+        
+        // 2. Graze Check
+        if (!b.grazed && dist < player.grazeRadius) {
+            b.grazed = true;
+            graze++;
+            score += 50;
+            grazeVal.innerText = graze;
         }
 
-        if (e.y > canvas.height + 50) enemies.splice(ei, 1);
+        if (b.x < -50 || b.x > canvas.width + 50 || b.y < -50 || b.y > canvas.height + 50) {
+            eBullets.splice(i, 1);
+        }
     });
 
-    // Update Particles
-    particles.forEach((p, i) => {
-        p.update();
-        if (p.life <= 0) particles.splice(i, 1);
-    });
-
-    requestAnimationFrame(loop);
+    scoreVal.innerText = score;
+    if (boss.hp <= 0) {
+        document.getElementById('statusTitle').innerText = "VICTORY!";
+        gameActive = false;
+        overlay.style.display = 'flex';
+    } else {
+        requestAnimationFrame(loop);
+    }
 }
 
-function gameOver() {
-    gameActive = false;
-    overlay.style.display = 'flex';
-    finalScore.innerText = score;
-}
+// Controls
+window.addEventListener('keydown', e => {
+    if (e.code === 'ArrowLeft' || e.code === 'KeyA') input.left = true;
+    if (e.code === 'ArrowRight' || e.code === 'KeyD') input.right = true;
+    if (e.code === 'ArrowUp' || e.code === 'KeyW') input.up = true;
+    if (e.code === 'ArrowDown' || e.code === 'KeyS') input.down = true;
+    if (e.code === 'Space') input.space = true;
+    if (e.shiftKey) input.shift = true;
+});
+window.addEventListener('keyup', e => {
+    if (e.code === 'ArrowLeft' || e.code === 'KeyA') input.left = false;
+    if (e.code === 'ArrowRight' || e.code === 'KeyD') input.right = false;
+    if (e.code === 'ArrowUp' || e.code === 'KeyW') input.up = false;
+    if (e.code === 'ArrowDown' || e.code === 'KeyS') input.down = false;
+    if (e.code === 'Space') input.space = false;
+    if (!e.shiftKey) input.shift = false;
+});
+restartBtn.addEventListener('click', () => location.reload());
 
-// Input Handling
-const handleKey = (e, status) => {
-    if (e.code === 'ArrowLeft' || e.code === 'KeyA') input.left = status;
-    if (e.code === 'ArrowRight' || e.code === 'KeyD') input.right = status;
-    if (e.code === 'ArrowUp' || e.code === 'KeyW') input.up = status;
-    if (e.code === 'ArrowDown' || e.code === 'KeyS') input.down = status;
-    if (e.code === 'Space') input.space = status;
-};
-
-window.addEventListener('keydown', e => handleKey(e, true));
-window.addEventListener('keyup', e => handleKey(e, false));
-restartBtn.addEventListener('click', init);
-
-// Start Game
 init();
