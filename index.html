@@ -8,23 +8,29 @@
 </head>
 <body>
     <div id="game-wrapper">
-        <!-- Boss HP Bar -->
-        <div id="boss-hp-container">
-            <div id="boss-hp-fill"></div>
-        </div>
+        <div id="boss-hp-container"><div id="boss-hp-fill"></div></div>
 
         <canvas id="gameCanvas"></canvas>
         
         <div id="hud">
             <div class="stat">SCORE: <span id="scoreVal">0</span></div>
             <div class="stat">GRAZE: <span id="grazeVal">0</span></div>
-            <div class="hint">SHIFT: Focus | SPACE: Shoot</div>
+            <div class="hint">ESC: Pause | R: Restart | SHIFT: Focus</div>
         </div>
 
-        <div id="screen-overlay">
+        <!-- Pause Overlay -->
+        <div id="pause-overlay" class="overlay">
+            <h1>PAUSED</h1>
+            <p>Take a breather, Pilot!</p>
+            <button id="resumeBtn">RESUME</button>
+            <button class="restartBtn">RESTART</button>
+        </div>
+
+        <!-- Game Over Overlay -->
+        <div id="screen-overlay" class="overlay">
             <h1 id="statusTitle">GAME OVER</h1>
             <p>Final Score: <span id="finalScore">0</span></p>
-            <button id="restartBtn">RETRY MISSION</button>
+            <button class="restartBtn">RETRY MISSION</button>
         </div>
     </div>
     <script src="script.js"></script>
